@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Osmand2Strava</string>
+    <string name="action_settings">Settings</string>
+    <string name="login_strava">Login</string>
+    <string name="title_activity_settings">Settings</string>
+
+    <string name="action_directory">Select GPX dir</string>
+
+    <!-- Strings related to Settings -->
+
+    <!-- Example General settings -->
+
+
+    <string name="pref_default_label_name">NP</string>
+    <string name="pref_title_label_name">Ride name</string>
+
+    <string name="pref_default_ride_number">212</string>
+    <string name="pref_title_ride_number">Ride number</string>
+    <string name="path_gpx">/sdcard/Android/data/net.osmand.plus/files/tracks/rec </string>
+    <string name="title_folder">Select GPX Folder</string>
+
+
+</resources>
