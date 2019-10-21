@@ -1,11 +1,11 @@
 package fr.rezvani.osmand2strava;
 
 import android.Manifest;
-import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
@@ -30,22 +30,22 @@ import android.widget.ListView;
 import android.widget.Toast;
 
 import com.github.isabsent.filepicker.SimpleFilePickerDialog;
-import com.sweetzpot.stravazpot.authenticaton.api.AccessScope;
-import com.sweetzpot.stravazpot.authenticaton.api.ApprovalPrompt;
 import com.sweetzpot.stravazpot.authenticaton.api.AuthenticationAPI;
-import com.sweetzpot.stravazpot.authenticaton.api.StravaLogin;
 import com.sweetzpot.stravazpot.authenticaton.model.AppCredentials;
 import com.sweetzpot.stravazpot.authenticaton.model.LoginResult;
 import com.sweetzpot.stravazpot.authenticaton.ui.StravaLoginActivity;
 import com.sweetzpot.stravazpot.common.api.AuthenticationConfig;
 
+import org.apache.http.util.EntityUtils;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-
+import okhttp3.Call;
+import okhttp3.Callback;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
@@ -73,11 +73,14 @@ public class MainActivity extends AppCompatActivity  implements
     private String RIDE_NAME_CODE_KEY = "ride_name";
     private String RIDE_NUMBER_CODE_KEY = "ride_number";
     private String NP_CODE_KEY = "n_peloton";
+    private String CODE_OAUTH ="";
+    private String ACCESS_TOKEN ="";
+    private String REFRESH_TOKEN = "";
 
 
     private String GPX_PATH_CODE_KEY = "path_gpx";
     private String SERVER_URL = "https://www.strava.com/api/v3/uploads";
-
+    private String OAUTH_URL = "https://www.strava.com/api/v3/oauth/token";
 
     ListView mListView;
     Context mContext;
@@ -117,6 +120,16 @@ public class MainActivity extends AppCompatActivity  implements
             }
         });
 
+        /**  Modif auth 2019 **/
+        if(getIntent().getData()!=null) {
+            CODE_OAUTH = getIntent().getData().getQueryParameter("code");
+
+            Toast.makeText(this, CODE_OAUTH, Toast.LENGTH_LONG).show();
+
+            getTokenv3();
+
+        }
+        /** fin modif 2019 **/
         readFolderinLog();
 
 
@@ -124,12 +137,36 @@ public class MainActivity extends AppCompatActivity  implements
 
     }
 
+
+
+
     private void loginStrava(View view){
+
+
+
+        /**   Modif auth 2019 **/
+        int strava_client_id = getResources().getInteger(R.integer.strava_id);
+        String client_id = String.valueOf(strava_client_id);
+        Uri intentUri = Uri.parse("https://www.strava.com/oauth/mobile/authorize")
+                .buildUpon()
+                .appendQueryParameter("client_id", client_id)
+                .appendQueryParameter("redirect_uri", "http://rezvani.fr")
+                .appendQueryParameter("response_type", "code")
+                .appendQueryParameter("approval_prompt", "auto")
+                .appendQueryParameter("scope", "activity:write,read")
+                .build();
+
+        Intent intent = new Intent(Intent.ACTION_VIEW, intentUri);
+        startActivity(intent);
+        /**   Fin Modif auth 2019 **/
+/**
         Intent intent = StravaLogin.withContext(getApplicationContext())
                 .withClientID(15833).withRedirectURI("http://rezvani.fr").withApprovalPrompt(ApprovalPrompt.AUTO)
                 .withAccessScope(AccessScope.VIEW_PRIVATE_WRITE)
                 .makeIntent();
         startActivityForResult(intent, RQ_LOGIN);
+
+**/
 
         Snackbar.make(view, "Connecte a Strava", Snackbar.LENGTH_LONG)
                 .setAction("Action", null).show();
@@ -204,6 +241,10 @@ public class MainActivity extends AppCompatActivity  implements
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+
+
+
         if(requestCode == RQ_LOGIN && resultCode == RESULT_OK && data != null) {
             client_code = data.getStringExtra(StravaLoginActivity.RESULT_CODE);
             // sauvegarde du code client
@@ -303,6 +344,74 @@ public class MainActivity extends AppCompatActivity  implements
 
 
 
+    public int getTokenv3() {
+
+
+
+
+           String strava_key = getResources().getString(R.string.strava_key);
+          int strava_client_id = getResources().getInteger(R.integer.strava_id);
+             RequestBody requestBody = new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                 .addFormDataPart("client_id", String.valueOf(strava_client_id))
+                 .addFormDataPart("client_secret", strava_key)
+                 .addFormDataPart("code", CODE_OAUTH)
+                 .addFormDataPart("grant_type", "authorization_code")
+                .build();
+
+
+
+
+            Request request = new Request.Builder()
+                    .url(OAUTH_URL)
+                    .post(requestBody)
+                    .header("code", CODE_OAUTH)
+                    .build();
+
+
+            client.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    String mMessage = e.getMessage().toString();
+                    Log.w("failure Response", mMessage);
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+
+                    String mMessage = response.body().string();
+                    try{
+                        JSONObject res = new JSONObject(mMessage);
+                        REFRESH_TOKEN = (String) res.get("refresh_token");
+                        ACCESS_TOKEN = (String) res.get("access_token");
+
+                        Log.w("refresh_token ", REFRESH_TOKEN);
+                        Log.w("access_token ", ACCESS_TOKEN);
+
+
+                    }catch (JSONException e){
+                        Log.w("ERROR PARSING JSON", mMessage);
+
+                    }
+
+
+                    Log.w("SUCCESS Response", mMessage);
+
+                }
+          });
+
+
+
+
+
+
+
+
+        return 0;
+    }
+
+
+
 
 
     public int uploadFile() {
@@ -328,7 +437,7 @@ public class MainActivity extends AppCompatActivity  implements
 
 
             Request request = new Request.Builder()
-                    .header("Authorization",strava_token)
+                    .header("Authorization", "Bearer " + ACCESS_TOKEN)
                     .url(SERVER_URL)
                     .post(requestBody)
                     .build();

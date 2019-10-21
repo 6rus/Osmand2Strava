@@ -36,7 +36,7 @@
         android:inputType="text"
         android:key="path_gpx"
         android:maxLines="1"
-        android:selectAllOnFocus="true"
+        android:selectAllOnFocus="true"ain
         android:singleLine="true"
         android:title="@string/pref_title_path_gpx" />-->
 
