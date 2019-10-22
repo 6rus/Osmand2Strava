@@ -36,7 +36,6 @@ import com.sweetzpot.stravazpot.authenticaton.model.LoginResult;
 import com.sweetzpot.stravazpot.authenticaton.ui.StravaLoginActivity;
 import com.sweetzpot.stravazpot.common.api.AuthenticationConfig;
 
-import org.apache.http.util.EntityUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -73,9 +72,13 @@ public class MainActivity extends AppCompatActivity  implements
     private String RIDE_NAME_CODE_KEY = "ride_name";
     private String RIDE_NUMBER_CODE_KEY = "ride_number";
     private String NP_CODE_KEY = "n_peloton";
+
+    //New auth
     private String CODE_OAUTH ="";
-    private String ACCESS_TOKEN ="";
+    private String ACCESS_TOKEN =null;
     private String REFRESH_TOKEN = "";
+    private Integer EXPIRES_AT = 0;
+
 
 
     private String GPX_PATH_CODE_KEY = "path_gpx";
@@ -172,12 +175,27 @@ public class MainActivity extends AppCompatActivity  implements
                 .setAction("Action", null).show();
     }
 
-    private LoginResult getToken(){
+
+
+    private LoginResult getToken() {
+        LoginResult result =null;
+
+
+
+        return result;
+
+    }
+
+
+        private LoginResult getTokenOld(){
 
 
         SharedPreferences prefs = this.getSharedPreferences(
                 APP_PATH, Context.MODE_PRIVATE);
         client_code =  prefs.getString(CLIENT_CODE_KEY,null);
+
+
+        
 
         LoginResult result =null;
         try {
@@ -191,6 +209,8 @@ public class MainActivity extends AppCompatActivity  implements
            result = api.getTokenForApp(AppCredentials.with(strava_client_id,strava_key ))
                     .withCode(client_code)
                     .execute();
+
+
         } catch (Exception e){
             e.printStackTrace();
         }
@@ -256,13 +276,16 @@ public class MainActivity extends AppCompatActivity  implements
                 @Override
                 public void run() {
                     try {
+
+                        refreshTokenv3();
+                        /**
                         LoginResult result  = getToken();
                         if(result==null){
                             Log.d("No result","null");
                         }else {
                             strava_token =result.getToken().toString();
                         }
-                        Log.d("STRAVA_TOKEN = ",strava_token);
+                        Log.d("STRAVA_TOKEN = ",strava_token); **/
                     }
                     catch(Exception e){
                         Log.d("e", e.getStackTrace().toString());
@@ -320,7 +343,7 @@ public class MainActivity extends AppCompatActivity  implements
                     //   uploadFile(selectedFilePath);
 
 
-                    if(strava_token!=null) {
+                    if(ACCESS_TOKEN!=null) {
                         new Thread(new Runnable() {
                             @Override
                             public void run() {
@@ -384,10 +407,10 @@ public class MainActivity extends AppCompatActivity  implements
                         JSONObject res = new JSONObject(mMessage);
                         REFRESH_TOKEN = (String) res.get("refresh_token");
                         ACCESS_TOKEN = (String) res.get("access_token");
-
+                        EXPIRES_AT = (Integer) res.get("expires_at");
                         Log.w("refresh_token ", REFRESH_TOKEN);
                         Log.w("access_token ", ACCESS_TOKEN);
-
+                        Log.w("expires_at ", EXPIRES_AT.toString());
 
                     }catch (JSONException e){
                         Log.w("ERROR PARSING JSON", mMessage);
@@ -410,6 +433,86 @@ public class MainActivity extends AppCompatActivity  implements
         return 0;
     }
 
+
+
+    public int refreshTokenv3() {
+
+
+        //  checking to see if the short-lived access token has expired
+        long currenttime = 1000*System.currentTimeMillis();
+        long expires_at =  EXPIRES_AT.longValue();
+
+        if (expires_at<currenttime) {
+            Log.w("expired : e<c",expires_at+ "<" + currenttime );
+
+            String strava_key = getResources().getString(R.string.strava_key);
+            int strava_client_id = getResources().getInteger(R.integer.strava_id);
+            RequestBody requestBody = new MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("client_id", String.valueOf(strava_client_id))
+                    .addFormDataPart("client_secret", strava_key)
+                    .addFormDataPart("grant_type", "refresh_token")
+                    .addFormDataPart("refresh_token", REFRESH_TOKEN)
+                    .build();
+
+
+
+
+            Request request = new Request.Builder()
+                    .url(OAUTH_URL)
+                    .post(requestBody)
+                    .header("code", CODE_OAUTH)
+                    .build();
+
+
+            client.newCall(request).enqueue(new Callback() {
+                @Override
+                public void onFailure(Call call, IOException e) {
+                    String mMessage = e.getMessage().toString();
+                    Log.w("failure Response", mMessage);
+                }
+
+                @Override
+                public void onResponse(Call call, Response response) throws IOException {
+
+                    String mMessage = response.body().string();
+                    try{
+                        JSONObject res = new JSONObject(mMessage);
+                        REFRESH_TOKEN = (String) res.get("refresh_token");
+                        ACCESS_TOKEN = (String) res.get("access_token");
+                        EXPIRES_AT = (Integer) res.get("expires_at");
+                        Log.w("refresh_token ", REFRESH_TOKEN);
+                        Log.w("access_token ", ACCESS_TOKEN);
+                        Log.w("expires_at ", EXPIRES_AT.toString());
+
+                    }catch (JSONException e){
+                        Log.w("ERROR PARSING JSON", mMessage);
+
+                    }
+
+
+                    Log.w("SUCCESS Response", mMessage);
+
+                }
+            });
+
+
+
+        } else {
+            Log.w("not expired : e>c",expires_at+ ">" + currenttime );
+
+        }
+
+
+
+
+
+
+
+
+
+        return 0;
+    }
 
 
 
@@ -536,13 +639,13 @@ public class MainActivity extends AppCompatActivity  implements
         protected String doInBackground(String... params) {
 
 
-
-            LoginResult result  = getToken();
-            if(result==null){
-                Log.d("No result","null");
-            }else {
-                strava_token =result.getToken().toString();
+            if(ACCESS_TOKEN==null){
+                getTokenv3();
+            } else{
+                refreshTokenv3();
             }
+
+
             return "Executed";
         }
 
@@ -550,7 +653,7 @@ public class MainActivity extends AppCompatActivity  implements
         protected void onPostExecute(String result) {
 
 
-            if(strava_token!=null) {
+            if(ACCESS_TOKEN!=null) {
 
 
                 new Thread(new Runnable() {
