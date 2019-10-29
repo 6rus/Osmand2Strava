@@ -69,6 +69,9 @@ public class MainActivity extends AppCompatActivity  implements
     private String errorResponseStrava ="not initialized";
     private String CLIENT_CODE_KEY = "fr.rezvani.osmand2strava";
 
+
+
+
     private String RIDE_NAME_CODE_KEY = "ride_name";
     private String RIDE_NUMBER_CODE_KEY = "ride_number";
     private String NP_CODE_KEY = "n_peloton";
@@ -78,6 +81,10 @@ public class MainActivity extends AppCompatActivity  implements
     private String ACCESS_TOKEN =null;
     private String REFRESH_TOKEN = "";
     private Integer EXPIRES_AT = 0;
+    private String PREF_CODE_AUTH = "PREF_CODE_AUTH";
+    private String PREF_ACCESS_TOKEN = "PREF_ACCESS_TOKEN";
+    private String PREF_REFRESH_TOKEN = "PREF_REFRESH_TOKEN";
+    private String PREF_EXPIRES_AT =  "EXPIRES_AT";
 
 
 
@@ -126,7 +133,8 @@ public class MainActivity extends AppCompatActivity  implements
         /**  Modif auth 2019 **/
         if(getIntent().getData()!=null) {
             CODE_OAUTH = getIntent().getData().getQueryParameter("code");
-
+            SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+            prefs.edit().putString(PREF_CODE_AUTH, CODE_OAUTH).apply();
             Toast.makeText(this, CODE_OAUTH, Toast.LENGTH_LONG).show();
 
             getTokenv3();
@@ -370,15 +378,20 @@ public class MainActivity extends AppCompatActivity  implements
     public int getTokenv3() {
 
 
+        SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+        String code_auth = prefs.getString(PREF_CODE_AUTH, null);
+        if( code_auth==null){
+            Log.w("ERROR ", "code_auth null ");
+            return 0;
 
-
-           String strava_key = getResources().getString(R.string.strava_key);
+        }
+          String strava_key = getResources().getString(R.string.strava_key);
           int strava_client_id = getResources().getInteger(R.integer.strava_id);
              RequestBody requestBody = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                  .addFormDataPart("client_id", String.valueOf(strava_client_id))
                  .addFormDataPart("client_secret", strava_key)
-                 .addFormDataPart("code", CODE_OAUTH)
+                 .addFormDataPart("code", code_auth)
                  .addFormDataPart("grant_type", "authorization_code")
                 .build();
 
@@ -388,7 +401,7 @@ public class MainActivity extends AppCompatActivity  implements
             Request request = new Request.Builder()
                     .url(OAUTH_URL)
                     .post(requestBody)
-                    .header("code", CODE_OAUTH)
+                    .header("code", code_auth)
                     .build();
 
 
@@ -405,12 +418,22 @@ public class MainActivity extends AppCompatActivity  implements
                     String mMessage = response.body().string();
                     try{
                         JSONObject res = new JSONObject(mMessage);
+
+
                         REFRESH_TOKEN = (String) res.get("refresh_token");
                         ACCESS_TOKEN = (String) res.get("access_token");
                         EXPIRES_AT = (Integer) res.get("expires_at");
                         Log.w("refresh_token ", REFRESH_TOKEN);
                         Log.w("access_token ", ACCESS_TOKEN);
                         Log.w("expires_at ", EXPIRES_AT.toString());
+
+                        // sauvegarde des tokens
+                        SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+                        prefs.edit().putString(PREF_ACCESS_TOKEN, ACCESS_TOKEN).apply();
+                        prefs.edit().putString(PREF_REFRESH_TOKEN, REFRESH_TOKEN).apply();
+                        prefs.edit().putInt(PREF_EXPIRES_AT, EXPIRES_AT).apply();
+
+
 
                     }catch (JSONException e){
                         Log.w("ERROR PARSING JSON", mMessage);
@@ -439,8 +462,14 @@ public class MainActivity extends AppCompatActivity  implements
 
 
         //  checking to see if the short-lived access token has expired
-        long currenttime = 1000*System.currentTimeMillis();
-        long expires_at =  EXPIRES_AT.longValue();
+        long currenttime = System.currentTimeMillis();
+        //long expires_at =  EXPIRES_AT.longValue();
+
+        SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+        long expires_at =  prefs.getInt(PREF_EXPIRES_AT, 0);
+      //  String access_token = prefs.getString(PREF_ACCESS_TOKEN, null);
+        String refresh_token =  prefs.getString(PREF_REFRESH_TOKEN, null);
+        String code_auth = prefs.getString(PREF_CODE_AUTH, null);
 
         if (expires_at<currenttime) {
             Log.w("expired : e<c",expires_at+ "<" + currenttime );
@@ -452,7 +481,7 @@ public class MainActivity extends AppCompatActivity  implements
                     .addFormDataPart("client_id", String.valueOf(strava_client_id))
                     .addFormDataPart("client_secret", strava_key)
                     .addFormDataPart("grant_type", "refresh_token")
-                    .addFormDataPart("refresh_token", REFRESH_TOKEN)
+                    .addFormDataPart("refresh_token", refresh_token)
                     .build();
 
 
@@ -461,7 +490,7 @@ public class MainActivity extends AppCompatActivity  implements
             Request request = new Request.Builder()
                     .url(OAUTH_URL)
                     .post(requestBody)
-                    .header("code", CODE_OAUTH)
+                    .header("code", code_auth)
                     .build();
 
 
@@ -484,6 +513,11 @@ public class MainActivity extends AppCompatActivity  implements
                         Log.w("refresh_token ", REFRESH_TOKEN);
                         Log.w("access_token ", ACCESS_TOKEN);
                         Log.w("expires_at ", EXPIRES_AT.toString());
+                        // sauvegarde des tokens
+                        SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+                        prefs.edit().putString(PREF_ACCESS_TOKEN, ACCESS_TOKEN).apply();
+                        prefs.edit().putString(PREF_REFRESH_TOKEN, REFRESH_TOKEN).apply();
+                        prefs.edit().putInt(PREF_EXPIRES_AT, EXPIRES_AT).apply();
 
                     }catch (JSONException e){
                         Log.w("ERROR PARSING JSON", mMessage);
@@ -537,10 +571,12 @@ public class MainActivity extends AppCompatActivity  implements
                             RequestBody.create(MEDIA_TYPE_MARKDOWN, new File(completFilePath)))
                     .addFormDataPart("data_type", "gpx")
                     .build();
-
+            // sauvegarde des tokens
+            SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+            String access_token =  prefs.getString(PREF_ACCESS_TOKEN, null);
 
             Request request = new Request.Builder()
-                    .header("Authorization", "Bearer " + ACCESS_TOKEN)
+                    .header("Authorization", "Bearer " + access_token)
                     .url(SERVER_URL)
                     .post(requestBody)
                     .build();
@@ -638,8 +674,9 @@ public class MainActivity extends AppCompatActivity  implements
         @Override
         protected String doInBackground(String... params) {
 
-
-            if(ACCESS_TOKEN==null){
+            SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+            String access_token =  prefs.getString(PREF_ACCESS_TOKEN, null);
+            if(access_token==null){
                 getTokenv3();
             } else{
                 refreshTokenv3();
@@ -653,7 +690,9 @@ public class MainActivity extends AppCompatActivity  implements
         protected void onPostExecute(String result) {
 
 
-            if(ACCESS_TOKEN!=null) {
+            SharedPreferences prefs = mContext.getSharedPreferences(  APP_PATH, Context.MODE_PRIVATE);
+            String access_token =  prefs.getString(PREF_ACCESS_TOKEN, null);
+            if(access_token!=null) {
 
 
                 new Thread(new Runnable() {
