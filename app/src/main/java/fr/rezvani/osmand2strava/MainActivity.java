@@ -41,6 +41,8 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import okhttp3.Call;
@@ -315,6 +317,8 @@ public class MainActivity extends AppCompatActivity  implements
         Log.d("Files", "Path: " + getPath());
         File directory = new File(getPath());
         File[] files = directory.listFiles();
+        // tri de la liste dans l'ordre décroissant pour voir la dernière trace GPX en premier
+        Arrays.sort(files, Collections.<File>reverseOrder());
         if(files==null){
 
 
