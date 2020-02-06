@@ -1,14 +1,15 @@
 package fr.rezvani.osmand2strava;
 
 import android.Manifest;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
@@ -16,17 +17,21 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.AppCompatDelegate;
 import android.support.v7.widget.AppCompatTextView;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.isabsent.filepicker.SimpleFilePickerDialog;
@@ -63,22 +68,22 @@ public class MainActivity extends AppCompatActivity  implements
     final private int INTERNET = 124;
     final private int RQ_LOGIN = 0;
     private String selectedFilePath;
+    private String custom_ride_name;
 
+
+    //Ride information
+    private String RIDE_NAME_CODE_KEY = "ride_name";
+    private String RIDE_NUMBER_CODE_KEY = "ride_number";
+    private String NP_CODE_KEY = "n_peloton";
+
+    //ID Strava
     private String strava_token =null;
-
     private String client_code = null;
     public static String APP_PATH = "fr.rezvani.osmand2strava";
     private String errorResponseStrava ="not initialized";
     private String CLIENT_CODE_KEY = "fr.rezvani.osmand2strava";
 
-
-
-
-    private String RIDE_NAME_CODE_KEY = "ride_name";
-    private String RIDE_NUMBER_CODE_KEY = "ride_number";
-    private String NP_CODE_KEY = "n_peloton";
-
-    //New auth
+    //New auth Strava
     private String CODE_OAUTH ="";
     private String ACCESS_TOKEN =null;
     private String REFRESH_TOKEN = "";
@@ -94,13 +99,14 @@ public class MainActivity extends AppCompatActivity  implements
     private String SERVER_URL = "https://www.strava.com/api/v3/uploads";
     private String OAUTH_URL = "https://www.strava.com/api/v3/oauth/token";
 
+    public static final int PICKDIR_RESULT_CODE = 1;
+    private Uri uri;
+
+    //UI information
     ListView mListView;
     Context mContext;
-    public static final MediaType MEDIA_TYPE_MARKDOWN
-            = MediaType.parse("multipart/form-data; charset=utf-8");
-
+    public static final MediaType MEDIA_TYPE_MARKDOWN = MediaType.parse("multipart/form-data; charset=utf-8");
     private final OkHttpClient client = new OkHttpClient();
-
 
 
     static {
@@ -144,10 +150,6 @@ public class MainActivity extends AppCompatActivity  implements
         }
         /** fin modif 2019 **/
         readFolderinLog();
-
-
-
-
     }
 
 
@@ -250,8 +252,9 @@ public class MainActivity extends AppCompatActivity  implements
             startActivity(intent);
             return true;
         } else if(id == R.id.action_directory) {
-            showListItemDialog(R.string.title_folder, Environment.getExternalStorageDirectory().getAbsolutePath(), SimpleFilePickerDialog.CompositeMode.FOLDER_ONLY_DIRECT_CHOICE_SELECTION, "PICK_DIALOG");
-
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.putExtra("android.content.extra.SHOW_ADVANCED", true);
+            startActivityForResult(Intent.createChooser(intent, "Choose directory"), PICKDIR_RESULT_CODE);
         }
 
         return super.onOptionsItemSelected(item);
@@ -271,11 +274,18 @@ public class MainActivity extends AppCompatActivity  implements
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode == PICKDIR_RESULT_CODE){
+            if (resultCode == -1) {
+                uri = data.getData();
+                SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(mContext);
+                String path = FileUtil.getFullPathFromTreeUri(uri,this);
+                Toast.makeText(this, "Path selected:\n" + path, Toast.LENGTH_LONG).show();
+                sharedPref.edit().putString(GPX_PATH_CODE_KEY, path) .commit();
 
-
-
-
-        if(requestCode == RQ_LOGIN && resultCode == RESULT_OK && data != null) {
+                readFolderinLog();
+            }
+        }
+        else if(requestCode == RQ_LOGIN && resultCode == RESULT_OK && data != null) {
             client_code = data.getStringExtra(StravaLoginActivity.RESULT_CODE);
             // sauvegarde du code client
             SharedPreferences prefs = this.getSharedPreferences(
@@ -350,32 +360,57 @@ public class MainActivity extends AppCompatActivity  implements
                     AppCompatTextView apt = (AppCompatTextView) view;
                     selectedFilePath = apt.getText().toString();
 
-                    Log.d("filePath",selectedFilePath);
-
-                    //   uploadFile(selectedFilePath);
-
-
-                    if(ACCESS_TOKEN!=null) {
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                //creating new thread to handle Http Operations
-                                uploadFile();
-                            }
-                        }).start();
-
-                    } else {
-                        Log.d("No token","test");
-                        new GetTokenBeforePosting().execute("");
+                    // Open dialog
+                    showUploadDialog();
                     }
-
-
-                }
             });
         }
 
 
     }
+
+    public void showUploadDialog() {
+        //Dialog for modify ride name
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        LayoutInflater inflater = this.getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.dialog, null);
+        dialogBuilder.setView(dialogView);
+
+        final EditText ride_name_id = (EditText) dialogView.findViewById(R.id.ride_name_id);
+        final TextView ride_name_label_id = (TextView) dialogView.findViewById(R.id.ride_name_label_id);
+        ride_name_id.setText(getRideName());
+        ride_name_label_id.setText("Ride name ");
+
+        dialogBuilder.setTitle("Upload dialog");
+        dialogBuilder.setPositiveButton("Upload", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                custom_ride_name = ride_name_id.getText().toString();
+
+                if(ACCESS_TOKEN!=null) {
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            //creating new thread to handle Http Operations
+                            uploadFile();
+                        }
+                    }).start();
+                } else {
+                    Log.d("No token","test");
+                    new GetTokenBeforePosting().execute("");
+                }
+
+                dialog.dismiss();
+            }
+        });
+        dialogBuilder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                //pass
+                dialog.dismiss();
+            }
+        });
+        dialogBuilder.create().show();
+    }
+
 
 
 
@@ -648,11 +683,17 @@ public class MainActivity extends AppCompatActivity  implements
 
     public String getRideName(){
         SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
-        String name = selectedFilePath.substring(0, selectedFilePath.lastIndexOf("."));
+        String name = new String();
+        if(custom_ride_name != null){
+            return custom_ride_name;
+        }
         if(sharedPref.getBoolean(NP_CODE_KEY,false)){
             String ride_name =  sharedPref.getString(RIDE_NAME_CODE_KEY,"PROUT");
             String ride_number =  sharedPref.getString(RIDE_NUMBER_CODE_KEY,"666");
             name = ride_name + " #" + ride_number;
+        }
+        else{
+            name = selectedFilePath.substring(0, selectedFilePath.lastIndexOf("."));
         }
         return name;
 
@@ -754,25 +795,6 @@ public class MainActivity extends AppCompatActivity  implements
 
     @Override
     public boolean onResult( String dialogTag, int which,  Bundle extras) {
-        switch (dialogTag) {
-            case "PICK_DIALOG":
-                if (extras.containsKey(SimpleFilePickerDialog.SELECTED_SINGLE_PATH)) {
-                    String selectedSinglePath = extras.getString(SimpleFilePickerDialog.SELECTED_SINGLE_PATH);
-                    Toast.makeText(this, "Path selected:\n" + selectedSinglePath, Toast.LENGTH_LONG).show();
-                    SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(mContext);
-                    boolean b=  sharedPref.edit().putString(GPX_PATH_CODE_KEY, selectedSinglePath) .commit();
-                 //   Toast.makeText(mContext, "commit =" + String.valueOf(b), Toast.LENGTH_LONG).show();
-                    readFolderinLog();
-
-                } else if (extras.containsKey(SimpleFilePickerDialog.SELECTED_PATHS)){
-                    List<String> selectedPaths = extras.getStringArrayList(SimpleFilePickerDialog.SELECTED_PATHS);
-                    showSelectedPathsToast(selectedPaths);
-                }
-                break;
-//            case PICK_DIALOG_OTHER:
-//                //Do what you want here
-//                break;
-        }
         return false;
     }
 

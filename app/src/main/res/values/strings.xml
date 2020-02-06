@@ -19,5 +19,9 @@
     <string name="path_gpx">/sdcard/Android/data/net.osmand.plus/files/tracks/rec </string>
     <string name="title_folder">Select GPX Folder</string>
 
+    <!--Dialog-->
+
+    <string name="ride_name_label_id">Your ride name</string>
+
 
 </resources>
