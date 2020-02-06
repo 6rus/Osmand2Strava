@@ -2,8 +2,8 @@
 <resources>
     <!-- Change values and rename this file > api_key.xml -->
     <!-- Api strava key to change -->
-    <string name="strava_key">38b9f6b809e942eaf0f80ded55ad9ff7eb3f1068</string>
+    <string name="strava_key"></string>
 
     <!-- client key strava to change -->
-    <integer name="strava_id">35744</integer>
+    <integer name="strava_id"></integer>
 </resources>
